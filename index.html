@@ -1,0 +1,376 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>足球预测 · 个人看板</title>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+<style>
+  :root {
+    --bg: #0f1117; --card: #1a1d27; --border: #2a2d3a;
+    --text: #e1e4ed; --muted: #8b8fa3;
+    --green: #00c853; --red: #ff5252; --yellow: #ffc107;
+    --blue: #448aff; --accent: #7c4dff; --pink: #ff4081;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    background: var(--bg); color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', 'Microsoft YaHei', sans-serif;
+    line-height: 1.6;
+  }
+  .container { max-width: 1300px; margin: 0 auto; padding: 20px; }
+
+  header {
+    text-align: center; padding: 50px 20px 30px;
+    background: linear-gradient(135deg, #1a1d27 0%, #252836 100%);
+    border-bottom: 1px solid var(--border);
+  }
+  header h1 { font-size: 2.3em; font-weight: 700; }
+  header h1 span { color: var(--accent); }
+  header p { color: var(--muted); margin-top: 6px; font-size: 1.1em; }
+
+  /* Date Group */
+  .date-group { margin-bottom: 24px; }
+  .date-group .date-header {
+    font-size: 1.1em; font-weight: 600; color: var(--accent);
+    padding: 8px 0; border-bottom: 1px solid var(--accent); margin-bottom: 12px;
+  }
+
+  /* Match Card */
+  .match-card {
+    background: var(--card); border: 1px solid var(--border); border-radius: 10px;
+    padding: 14px 18px; margin-bottom: 10px;
+    display: grid; grid-template-columns: 1fr auto auto auto; gap: 16px; align-items: center;
+  }
+  .match-card .teams { font-weight: 600; }
+  .match-card .teams small { color: var(--muted); display: block; font-weight: 400; font-size: 0.8em; }
+  .match-card .odds { color: var(--muted); font-size: 0.85em; text-align: center; white-space: nowrap; }
+  .match-card .odds span { display: block; }
+  .match-card .odds .odds-h { color: var(--green); }
+  .match-card .odds .odds-a { color: var(--red); }
+
+  /* Dual Model */
+  .model-pred { text-align: center; min-width: 90px; }
+  .model-pred .model-label { font-size: 0.7em; color: var(--muted); text-transform: uppercase; letter-spacing: 1px; }
+  .model-pred .model-result { font-size: 0.95em; font-weight: 700; margin: 2px 0; }
+  .model-pred .model-conf { font-size: 0.75em; color: var(--muted); }
+  .pred-win  { color: var(--green); }
+  .pred-loss { color: var(--red); }
+  .pred-draw { color: var(--yellow); }
+  .pred-lean { color: var(--blue); }
+  .pred-unkn { color: var(--muted); }
+
+  .score-badge {
+    background: rgba(124,77,255,0.12); color: var(--accent);
+    padding: 4px 10px; border-radius: 6px; font-weight: 700; font-size: 0.9em;
+    text-align: center; min-width: 50px;
+  }
+
+  /* Section */
+  .section {
+    background: var(--card); border: 1px solid var(--border); border-radius: 12px;
+    padding: 24px; margin-bottom: 24px;
+  }
+  .section h2 { font-size: 1.2em; margin-bottom: 16px; display: flex; align-items: center; gap: 8px; border-bottom: 1px solid var(--border); padding-bottom: 8px; }
+
+  /* History table */
+  table { width: 100%; border-collapse: collapse; font-size: 0.85em; }
+  th { text-align: left; color: var(--muted); font-weight: 500; padding: 8px 6px; border-bottom: 1px solid var(--border); }
+  td { padding: 8px 6px; border-bottom: 1px solid rgba(42,45,58,0.4); }
+  tr:hover td { background: rgba(124,77,255,0.04); }
+
+  /* Chart */
+  .chart-wrap { position: relative; height: 280px; }
+  .chart-wrap canvas { width: 100% !important; }
+
+  /* Stats */
+  .stats-bar { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 12px; margin-bottom: 24px; }
+  .stat-card { background: var(--card); border: 1px solid var(--border); border-radius: 10px; padding: 16px; text-align: center; }
+  .stat-card .label { color: var(--muted); font-size: 0.8em; text-transform: uppercase; letter-spacing: 1px; }
+  .stat-card .value { font-size: 1.8em; font-weight: 700; margin: 2px 0; }
+  .stat-card .sub  { color: var(--muted); font-size: 0.75em; }
+
+  .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
+  @media (max-width: 768px) {
+    .grid-2 { grid-template-columns: 1fr; }
+    .match-card { grid-template-columns: 1fr; gap: 8px; }
+  }
+
+  footer { text-align: center; padding: 24px; color: var(--muted); font-size: 0.8em; border-top: 1px solid var(--border); margin-top: 30px; }
+
+  .dual-models { display: flex; gap: 12px; align-items: center; }
+  .model-divider { color: var(--border); font-size: 1.2em; }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>⚽ 足球预测<span>·</span>个人看板</h1>
+  <p>双模型并行预测 · v3.7 区间 + v4-strict 精确 · 赛后复盘 · 盈亏记录</p>
+</header>
+
+<div class="container">
+  <div class="stats-bar">
+    <div class="stat-card">
+      <div class="label">预测场次</div>
+      <div class="value" style="color:var(--accent);" id="stat-total">0</div>
+      <div class="sub">已开售待赛</div>
+    </div>
+    <div class="stat-card">
+      <div class="label">v4明确方向</div>
+      <div class="value" style="color:var(--blue);" id="stat-v4-clear">0</div>
+      <div class="sub">排除平局场次</div>
+    </div>
+    <div class="stat-card">
+      <div class="label">历史命中率</div>
+      <div class="value" style="color:var(--green);" id="stat-rate">0%</div>
+      <div class="sub" id="stat-detail">0/0</div>
+    </div>
+    <div class="stat-card">
+      <div class="label">累计盈亏</div>
+      <div class="value" style="color:var(--green);" id="stat-pnl">¥0</div>
+      <div class="sub" id="stat-roi">ROI: 0%</div>
+    </div>
+  </div>
+
+  <!-- Predictions by date -->
+  <div class="section">
+    <h2>📋 今日预测 <span style="color:var(--muted);font-size:0.8em;font-weight:400;">（v3.7 + v4-strict 双模型）</span></h2>
+    <div id="predictions-container"></div>
+  </div>
+
+  <!-- Reviews + Chart -->
+  <div class="grid-2">
+    <div class="section">
+      <h2>🔍 近期复盘</h2>
+      <div id="recent-reviews"><p style="color:var(--muted)">暂无复盘数据</p></div>
+    </div>
+    <div class="section">
+      <h2>📊 盈亏趋势</h2>
+      <div class="chart-wrap"><canvas id="pnlChart"></canvas></div>
+    </div>
+  </div>
+
+  <!-- History -->
+  <div class="section">
+    <h2>📜 历史记录</h2>
+    <div style="overflow-x:auto;">
+      <table>
+        <thead>
+          <tr><th>日期</th><th>赛事</th><th>赔率(H/D/A)</th><th>v3.7</th><th>v4-s</th><th>比分</th><th>赛果</th><th>投入</th><th>回报</th><th>盈亏</th></tr>
+        </thead>
+        <tbody id="history-body"></tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<footer>Data powered by Hermes Agent · 体彩API · 双模型预测 · 数据手动维护</footer>
+
+<script>
+// ======================== DATA ========================
+const DATA = {
+  predictions: [
+    { date: '2026-05-08', match: "利雅得青年 vs 利雅得胜利", odds_h: 8.70, odds_d: 6.00, odds_a: 1.18, score: '1-2', v3: "客胜/平", v3_conf: 51, v4: "客胜", v4_conf: 64, amount: 0, result: null },
+    { date: '2026-05-08', match: "弗赖堡 vs 布拉加", odds_h: 1.53, odds_d: 3.72, odds_a: 4.85, score: '1-2', v3: "难料", v3_conf: 42, v4: "平", v4_conf: 55, amount: 0, result: null },
+    { date: '2026-05-08', match: "阿斯顿维拉 vs 诺丁汉森林", odds_h: 1.58, odds_d: 3.68, odds_a: 4.45, score: '1-2', v3: "难料", v3_conf: 30, v4: "平", v4_conf: 85, amount: 0, result: null },
+    { date: '2026-05-08', match: "斯特拉斯堡 vs 巴列卡诺", odds_h: 1.81, odds_d: 3.35, odds_a: 3.60, score: '1-2', v3: "难料", v3_conf: 41, v4: "平", v4_conf: 71, amount: 0, result: null },
+    { date: '2026-05-08', match: "米拉索尔 vs 基多体育大学", odds_h: 1.40, odds_d: 3.95, odds_a: 6.20, score: '1-1', v3: "主胜/平", v3_conf: 50, v4: "偏主", v4_conf: 52, amount: 0, result: null },
+    { date: '2026-05-08', match: "麦德林独立 vs 弗拉门戈", odds_h: 4.90, odds_d: 3.37, odds_a: 1.59, score: '1-1', v3: "客胜/平", v3_conf: 47, v4: "平", v4_conf: 55, amount: 0, result: null },
+    { date: '2026-05-08', match: "TPS图尔库 vs 赫尔辛基", odds_h: 4.50, odds_d: 3.95, odds_a: 1.53, score: '1-1', v3: "客胜/平", v3_conf: 47, v4: "平", v4_conf: 54, amount: 0, result: null },
+    { date: '2026-05-08', match: "坦佩雷山猫 vs AC奥卢", odds_h: 2.41, odds_d: 3.35, odds_a: 2.41, score: '1-2', v3: "难料", v3_conf: 34, v4: "平", v4_conf: 85, amount: 0, result: null },
+    { date: '2026-05-09', match: "帕德博恩 vs 卡尔斯鲁厄", odds_h: 1.26, odds_d: 5.40, odds_a: 6.65, score: '2-2', v3: "主胜/平", v3_conf: 42, v4: "主胜", v4_conf: 65, amount: 0, result: null },
+    { date: '2026-05-09', match: "凯泽斯劳滕 vs 比勒费尔德", odds_h: 3.27, odds_d: 3.65, odds_a: 1.82, score: '1-1', v3: "难料", v3_conf: 39, v4: "平", v4_conf: 78, amount: 0, result: null },
+    { date: '2026-05-09', match: "埃尔夫斯堡 vs 布鲁马波卡纳", odds_h: 1.73, odds_d: 3.40, odds_a: 3.90, score: '2-1', v3: "主胜/平", v3_conf: 46, v4: "平", v4_conf: 55, amount: 0, result: null },
+    { date: '2026-05-09', match: "汉坎 vs 瓦勒伦加", odds_h: 2.77, odds_d: 3.50, odds_a: 2.07, score: '2-2', v3: "难料", v3_conf: 29, v4: "平", v4_conf: 85, amount: 0, result: null },
+    { date: '2026-05-09', match: "库奥皮奥 vs 塞伊奈约基", odds_h: 1.50, odds_d: 4.10, odds_a: 4.60, score: '1-2', v3: "难料", v3_conf: 38, v4: "平", v4_conf: 72, amount: 0, result: null },
+    { date: '2026-05-09', match: "多特蒙德 vs 法兰克福", odds_h: 1.43, odds_d: 4.55, odds_a: 4.75, score: '2-1', v3: "难料", v3_conf: 41, v4: "平", v4_conf: 55, amount: 0, result: null },
+    { date: '2026-05-09', match: "都灵 vs 萨索洛", odds_h: 2.37, odds_d: 3.10, odds_a: 2.60, score: '1-1', v3: "难料", v3_conf: 38, v4: "平", v4_conf: 85, amount: 0, result: null },
+    { date: '2026-05-09', match: "朗斯 vs 南特", odds_h: 1.32, odds_d: 4.80, odds_a: 6.10, score: '2-2', v3: "主胜/平", v3_conf: 50, v4: "偏主", v4_conf: 52, amount: 0, result: null },
+    { date: '2026-05-09', match: "赫尔城 vs 米尔沃尔", odds_h: 2.77, odds_d: 3.00, odds_a: 2.30, score: '1-2', v3: "客胜/平", v3_conf: 46, v4: "平", v4_conf: 71, amount: 0, result: null },
+    { date: '2026-05-09', match: "莱万特 vs 奥萨苏纳", odds_h: 2.27, odds_d: 3.15, odds_a: 2.70, score: '1-1', v3: "难料", v3_conf: 32, v4: "平", v4_conf: 85, amount: 0, result: null }
+  ],
+  reviews: [
+    // { date: "2026-05-06", match: "曼城 vs 阿森纳", odds_h: 1.80, odds_d: 3.50, odds_a: 3.80, score: "1-1", v3: "主胜/平", v4: "平", result: "draw", note: "低估防守", amount: 100, odds: 3.50 },
+  ],
+  funds: { total_in: 0, total_out: 0 }
+};
+
+// ======================== HELPERS ========================
+function predClass(result) {
+  if (!result) return 'pred-unkn';
+  if (result.includes('主胜')) return 'pred-win';
+  if (result.includes('客胜')) return 'pred-loss';
+  if (result === '平') return 'pred-draw';
+  if (result === '偏主') return 'pred-lean';
+  if (result === '偏客') return 'pred-loss';
+  return 'pred-unkn';
+}
+
+// ======================== RENDER ========================
+function renderAll() {
+  renderStats();
+  renderPredictions();
+  renderReviews();
+  renderHistory();
+  renderChart();
+}
+
+function renderStats() {
+  const all = DATA.predictions;
+  document.getElementById('stat-total').textContent = all.length;
+  
+  const v4clear = all.filter(p => p.v4 === '主胜' || p.v4 === '客胜').length;
+  document.getElementById('stat-v4-clear').textContent = v4clear;
+  
+  const reviewed = DATA.reviews.filter(r => r.result === 'win' || r.result === 'lose' || r.result === 'draw');
+  const wins = reviewed.filter(r => r.result === 'win').length;
+  const rate = reviewed.length > 0 ? Math.round(wins / reviewed.length * 100) : 0;
+  document.getElementById('stat-rate').textContent = rate + '%';
+  document.getElementById('stat-detail').textContent = wins + '/' + reviewed.length;
+  
+  const pnl = DATA.funds.total_out - DATA.funds.total_in;
+  const el = document.getElementById('stat-pnl');
+  el.textContent = (pnl >= 0 ? '¥+' : '¥') + pnl;
+  el.style.color = pnl > 0 ? 'var(--green)' : pnl < 0 ? 'var(--red)' : 'var(--muted)';
+  document.getElementById('stat-roi').textContent = 'ROI: ' + (DATA.funds.total_in > 0 ? Math.round(pnl/DATA.funds.total_in*100) : 0) + '%';
+}
+
+function renderPredictions() {
+  const all = DATA.predictions;
+  if (all.length === 0) {
+    document.getElementById('predictions-container').innerHTML = '<p style="color:var(--muted)">📭 暂无预测数据</p>';
+    return;
+  }
+  
+  // Group by date
+  const groups = {};
+  all.forEach(p => {
+    if (!groups[p.date]) groups[p.date] = [];
+    groups[p.date].push(p);
+  });
+  
+  let html = '';
+  for (const [date, matches] of Object.entries(groups)) {
+    const dayNames = {'2026-05-08': '周四', '2026-05-09': '周五', '2026-05-10': '周六', '2026-05-11': '周日'};
+    html += `<div class="date-group"><div class="date-header">📅 ${date} ${dayNames[date]||''} · ${matches.length}场</div>`;
+    
+    matches.forEach(p => {
+      html += `<div class="match-card">
+        <div class="teams">
+          ${p.match}
+          <small>推荐比分</small>
+        </div>
+        <div class="score-badge">${p.score}</div>
+        <div class="odds">
+          <span class="odds-h">主 ${p.odds_h.toFixed(2)}</span>
+          <span>平 ${p.odds_d.toFixed(2)}</span>
+          <span class="odds-a">客 ${p.odds_a.toFixed(2)}</span>
+        </div>
+        <div class="dual-models">
+          <div class="model-pred">
+            <div class="model-label">v3.7</div>
+            <div class="model-result ${predClass(p.v3)}">${p.v3}</div>
+            <div class="model-conf">${p.v3_conf}%</div>
+          </div>
+          <div class="model-divider">|</div>
+          <div class="model-pred">
+            <div class="model-label">v4-strict</div>
+            <div class="model-result ${predClass(p.v4)}">${p.v4}</div>
+            <div class="model-conf">${p.v4_conf}%</div>
+          </div>
+        </div>
+      </div>`;
+    });
+    
+    html += '</div>';
+  }
+  
+  document.getElementById('predictions-container').innerHTML = html;
+}
+
+function renderReviews() {
+  const el = document.getElementById('recent-reviews');
+  const items = DATA.reviews.slice(-5).reverse();
+  if (items.length === 0) {
+    el.innerHTML = '<p style="color:var(--muted)">暂无复盘数据，赛后更新</p>';
+    return;
+  }
+  el.innerHTML = items.map(r => `
+    <div style="padding:10px 0;border-bottom:1px solid rgba(42,45,58,0.4);">
+      <div style="display:flex;justify-content:space-between;align-items:center;">
+        <span><strong>${r.match}</strong> <span style="color:var(--muted);font-size:0.8em;">${r.date}</span></span>
+        <span style="color:${r.result==='win'?'var(--green)':r.result==='lose'?'var(--red)':'var(--yellow)'};font-weight:600;">
+          ${r.result==='win'?'✅ 命中':r.result==='lose'?'❌ 未中':'⚪ 走水'}
+        </span>
+      </div>
+      <div style="color:var(--muted);font-size:0.8em;margin-top:4px;">
+        v3: ${r.v3||'—'} | v4: ${r.v4||'—'} | 比分: ${r.score} | ${r.note||''}
+      </div>
+    </div>`).join('');
+}
+
+function renderHistory() {
+  const tbody = document.getElementById('history-body');
+  const items = DATA.predictions;
+  if (items.length === 0) {
+    tbody.innerHTML = '<tr><td colspan="10" style="color:var(--muted);text-align:center;padding:20px;">暂无记录</td></tr>';
+    return;
+  }
+  
+  tbody.innerHTML = items.map(p => {
+    const result = p.result;
+    const resultLabel = result === 'win' ? '✅ 命中' : result === 'lose' ? '❌ 未中' : result === 'draw' ? '⚪ 走水' : '⏳ 待定';
+    const resultColor = result === 'win' ? 'var(--green)' : result === 'lose' ? 'var(--red)' : 'var(--muted)';
+    return `<tr>
+      <td>${p.date}</td>
+      <td>${p.match}</td>
+      <td style="font-size:0.8em;color:var(--muted)">${p.odds_h.toFixed(2)}/${p.odds_d.toFixed(2)}/${p.odds_a.toFixed(2)}</td>
+      <td><span style="color:${p.v3.includes('主胜')?'var(--green)':p.v3.includes('客胜')?'var(--red)':'var(--yellow)'}">${p.v3}</span> <small style="color:var(--muted)">${p.v3_conf}%</small></td>
+      <td><span style="color:${p.v4==='主胜'?'var(--green)':p.v4==='客胜'?'var(--red)':p.v4==='平'?'var(--yellow)':'var(--blue)'}">${p.v4}</span> <small style="color:var(--muted)">${p.v4_conf}%</small></td>
+      <td>${p.score}</td>
+      <td style="color:${resultColor}">${resultLabel}</td>
+      <td>¥${p.amount || 0}</td>
+      <td>—</td>
+      <td>—</td>
+    </tr>`;
+  }).join('');
+}
+
+// Chart
+let pnlChartInstance = null;
+function renderChart() {
+  const ctx = document.getElementById('pnlChart').getContext('2d');
+  if (pnlChartInstance) pnlChartInstance.destroy();
+  
+  if (DATA.reviews.length === 0) {
+    ctx.canvas.parentElement.innerHTML = '<p style="color:var(--muted);text-align:center;padding-top:100px;">暂无数据</p>';
+    return;
+  }
+  
+  const reviews = DATA.reviews.filter(r => r.amount && r.result).sort((a,b) => a.date.localeCompare(b.date));
+  const labels = reviews.map(r => r.date.slice(5));
+  let cum = 0;
+  const data = reviews.map(r => {
+    cum += r.result === 'win' ? r.amount * r.odds - r.amount : r.result === 'lose' ? -r.amount : 0;
+    return cum;
+  });
+
+  pnlChartInstance = new Chart(ctx, {
+    type: 'line',
+    data: { labels, datasets: [{ label: '累计盈亏', data, borderColor: '#7c4dff', backgroundColor: 'rgba(124,77,255,0.1)', fill: true, tension: 0.3, pointRadius: 4 }] },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      plugins: { legend: { display: false } },
+      scales: {
+        x: { ticks: { color: '#8b8fa3' }, grid: { color: 'rgba(42,45,58,0.3)' } },
+        y: { ticks: { color: '#8b8fa3', callback: v => '¥'+v }, grid: { color: 'rgba(42,45,58,0.3)' } }
+      }
+    }
+  });
+}
+
+renderAll();
+</script>
+</body>
+</html>
